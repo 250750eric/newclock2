@@ -2,90 +2,179 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#050f05">
 <title>ENV-MONITOR</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+  
+  /* 基礎重置與防溢出設定 */
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #050f05; color: #00ff41; font-family: 'Share Tech Mono', monospace, Courier, monospace; min-height: 100vh; overflow: hidden; position: relative; }
+  body { 
+    background: #050f05; 
+    color: #00ff41; 
+    font-family: 'Share Tech Mono', monospace, Courier, monospace; 
+    min-height: 100vh; 
+    overflow-x: hidden; /* 嚴格防止水平撐破版面 */
+    overflow-y: auto;   /* 允許小螢幕上下滑動 */
+    position: relative; 
+  }
+  
+  /* CRT 特效層 (固定在最上層且不影響點擊) */
   body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px); pointer-events: none; z-index: 1000; }
   body::after { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%); pointer-events: none; z-index: 999; }
-  #terminal { width: 100%; min-height: 100vh; padding: 16px; display: grid; grid-template-rows: auto 1fr auto; gap: 10px; position: relative; }
+  
+  /* 主容器 - 改為 Flex 彈性佈局 */
+  #terminal { 
+    width: 100%; 
+    min-height: 100vh; 
+    padding: 12px; 
+    display: flex; 
+    flex-direction: column; 
+    position: relative; 
+    z-index: 10;
+  }
 
   /* Header - 綠色 */
-  #header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #00aa2a; padding-bottom: 8px; font-size: 10px; color: #00aa2a; letter-spacing: 2px; flex-wrap: wrap; gap: 4px; }
-  #sys-id { font-size: 11px; color: #00ff41; }
+  #header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: flex-start; 
+    border-bottom: 1px solid #00aa2a; 
+    padding-bottom: 8px; 
+    font-size: 10px; 
+    color: #00aa2a; 
+    letter-spacing: 1px; 
+    flex-wrap: wrap; 
+    gap: 6px; 
+  }
+  #sys-id { font-size: 11px; color: #00ff41; font-weight: bold; }
+
+  /* 中間主內容區 (自動推擠填滿) */
+  #main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 0;
+  }
 
   /* 時鐘區 - 綠色 */
-  #clock-section { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; }
-  #time-display { font-family: 'VT323', monospace; font-size: clamp(60px, 18vw, 130px); color: #00ff41; letter-spacing: 4px; text-shadow: 0 0 20px #00ff41, 0 0 40px #00aa2a; line-height: 1; animation: flicker 8s infinite; }
+  #clock-section { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #time-display { font-family: 'VT323', monospace; font-size: clamp(60px, 16vw, 130px); color: #00ff41; letter-spacing: 4px; text-shadow: 0 0 20px #00ff41, 0 0 40px #00aa2a; line-height: 1; animation: flicker 8s infinite; }
   @keyframes flicker { 0%,98%,100%{opacity:1} 98.5%{opacity:0.92} 99%{opacity:1} 99.5%{opacity:0.88} }
   #date-display { font-size: 13px; color: #00cc33; letter-spacing: 3px; margin-top: 4px; text-shadow: 0 0 10px #00aa2a; }
-  #lunar-display { font-size: 11px; color: #00aa2a; letter-spacing: 2px; margin-top: 4px; }
+  #lunar-display { font-size: 12px; color: #00aa2a; letter-spacing: 2px; margin-top: 4px; }
 
-  /* Ticker - 橙色 */
-  #ticker-wrap { overflow: hidden; border: 1px solid #7a3a00; padding: 4px 0; background: rgba(255,140,0,0.04); }
-  #ticker { white-space: nowrap; font-size: 10px; color: #cc6600; letter-spacing: 2px; animation: scroll-ticker 30s linear infinite; display: inline-block; }
-  @keyframes scroll-ticker { 0%{transform:translateX(100vw)} 100%{transform:translateX(-100%)} }
+  /* Ticker - 橙色 (修復撐破版面的核心) */
+  #ticker-wrap { 
+    width: 100%; 
+    overflow: hidden; 
+    border: 1px solid #7a3a00; 
+    padding: 4px 0; 
+    background: rgba(255,140,0,0.04); 
+    box-sizing: border-box;
+  }
+  #ticker { 
+    display: inline-block; 
+    white-space: nowrap; 
+    font-size: 10px; 
+    color: #cc6600; 
+    letter-spacing: 2px; 
+    padding-left: 100%; /* 從容器最右側開始 */
+    animation: scroll-ticker 25s linear infinite; 
+  }
+  @keyframes scroll-ticker { 
+    0% { transform: translate3d(0, 0, 0); } 
+    100% { transform: translate3d(-100%, 0, 0); } 
+  }
 
   /* 四格面板 - 橙色 */
-  #data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px 0; }
-  .data-panel { border: 1px solid #7a3a00; padding: 8px; background: rgba(255,140,0,0.04); position: relative; overflow: hidden; }
+  #data-grid { 
+    display: grid; 
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 8px; 
+    width: 100%; 
+  }
+  .data-panel { border: 1px solid #7a3a00; padding: 10px 8px; background: rgba(255,140,0,0.04); position: relative; overflow: hidden; }
   .data-panel::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #ff8c00; opacity: 0.5; }
-  .panel-label { font-size: 8px; color: #7a3a00; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
-  .panel-value { font-family: 'VT323', monospace; font-size: clamp(24px, 5vw, 32px); color: #ff8c00; line-height: 1; text-shadow: 0 0 8px #ff6600; }
-  .panel-unit { font-size: 9px; color: #cc5500; margin-top: 2px; }
-  .panel-bar { height: 3px; background: #3d1a00; margin-top: 4px; overflow: hidden; }
+  .panel-label { font-size: 9px; color: #7a3a00; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .panel-value { font-family: 'VT323', monospace; font-size: clamp(28px, 6vw, 36px); color: #ff8c00; line-height: 1; text-shadow: 0 0 8px #ff6600; }
+  .panel-unit { font-size: 9px; color: #cc5500; margin-top: 4px; }
+  .panel-bar { height: 3px; background: #3d1a00; margin-top: 6px; overflow: hidden; width: 100%; }
   .panel-bar-fill { height: 100%; background: #ff8c00; transition: width 1s ease; box-shadow: 0 0 4px #ff6600; }
+  .wx-icon { font-size: 18px; line-height: 1; margin-bottom: 4px; }
+  
+  /* AQI 顏色變化 */
   .aqi-good .panel-value { color: #ff8c00; text-shadow: 0 0 8px #ff6600; }
   .aqi-moderate .panel-value { color: #ffcc00; text-shadow: 0 0 8px #ffaa00; }
   .aqi-unhealthy .panel-value { color: #ff4400; text-shadow: 0 0 8px #ff2200; }
   .aqi-hazardous .panel-value { color: #ff0000; text-shadow: 0 0 8px #cc0000; }
 
   /* 底部狀態列 - 橙色 */
-  #status-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; border-top: 1px solid #7a3a00; padding-top: 8px; }
+  #status-bar { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr 1fr; 
+    gap: 10px; 
+    border-top: 1px solid #7a3a00; 
+    padding-top: 10px; 
+    margin-top: auto;
+  }
   .status-block { font-size: 10px; color: #cc6600; letter-spacing: 1px; }
-  .status-block .status-title { color: #7a3a00; font-size: 8px; letter-spacing: 2px; margin-bottom: 3px; }
-  #tts-log { font-size: 10px; color: #cc6600; min-height: 14px; letter-spacing: 1px; word-break: break-all; }
+  .status-block .status-title { color: #7a3a00; font-size: 9px; letter-spacing: 2px; margin-bottom: 4px; }
+  #tts-log { font-size: 11px; color: #cc6600; min-height: 16px; letter-spacing: 1px; word-break: break-all; }
   #tts-log.active { color: #ff8c00; text-shadow: 0 0 6px #ff6600; animation: blink-text 0.5s infinite; }
   @keyframes blink-text { 50%{opacity:0.6} }
-  #voice-indicator { display: flex; align-items: center; gap: 6px; font-size: 9px; color: #7a3a00; letter-spacing: 1px; }
+  
+  #voice-indicator { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #7a3a00; letter-spacing: 1px; margin-bottom: 4px; }
   #voice-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d1a00; transition: all 0.3s; flex-shrink: 0; }
   #voice-indicator.listening #voice-dot { background: #ff8c00; box-shadow: 0 0 8px #ff6600; animation: pulse-dot 1s infinite; }
   #voice-indicator.heard #voice-dot { background: #ffff00; box-shadow: 0 0 8px #ffff00; }
   @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
-  #ambient-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-  .amb-btn { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #7a3a00; border: 1px solid #3d1a00; background: none; padding: 3px 6px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s; }
+  
+  .amb-btn { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: #7a3a00; border: 1px solid #3d1a00; background: none; padding: 4px 8px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s; margin-right: 4px; margin-bottom: 4px; }
   .amb-btn:hover, .amb-btn.active { color: #ff8c00; border-color: #cc5500; background: rgba(255,140,0,0.07); text-shadow: 0 0 4px #ff6600; }
   .cursor::after { content: '_'; animation: blink 1s step-end infinite; color: #ff8c00; }
   @keyframes blink { 50%{opacity:0} }
-  .wx-icon { font-size: 16px; line-height: 1; margin-bottom: 2px; }
 
-  /* 手機橫豎螢幕適配 */
-  @media (max-width: 480px) {
-    #data-grid { grid-template-columns: repeat(2, 1fr); }
-    #status-bar { grid-template-columns: 1fr; gap: 6px; }
-    #header { font-size: 9px; }
+  /* ！！！手機直屏響應式優化！！！ */
+  @media (max-width: 650px) {
+    #data-grid { 
+      grid-template-columns: repeat(2, 1fr); /* 手機直拿時變成 2x2 格 */
+    }
+    #status-bar { 
+      grid-template-columns: 1fr; /* 手機直拿時狀態列垂直堆疊 */
+      gap: 12px; 
+    }
+    #header { 
+      flex-direction: column; 
+    }
   }
 </style>
 </head>
 <body>
 <canvas id="bg-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.12;"></canvas>
+
 <div id="terminal">
   <div id="header">
-    <span id="sys-id">ENV-MONITOR v4.2.2</span>
-    <span><span id="coord-val">24.16°N 120.68°E</span> // <span id="loc-display">定位中...</span></span>
-    <span>UP: <span id="uptime-val">00:00:00</span></span>
+    <div id="sys-id">ENV-MONITOR v4.2.3</div>
+    <div><span id="coord-val">24.16°N 120.68°E</span> // <span id="loc-display">定位中...</span></div>
+    <div>UPTIME: <span id="uptime-val">00:00:00</span></div>
   </div>
-  <div>
+
+  <div id="main-content">
     <div id="clock-section">
       <div id="time-display">00:00:00</div>
       <div id="date-display">---- -- -- [---]</div>
       <div id="lunar-display">農曆 載入中...</div>
     </div>
-    <div id="ticker-wrap"><span id="ticker">// 系統啟動中 //</span></div>
-    <div id="data-grid" style="margin-top:6px;">
+    
+    <div id="ticker-wrap">
+      <div id="ticker">// 系統啟動中 //</div>
+    </div>
+    
+    <div id="data-grid">
       <div class="data-panel" id="panel-temp">
         <div class="panel-label">■ 氣溫 TEMP</div>
         <div class="wx-icon" id="wx-icon">◈</div>
@@ -116,21 +205,22 @@
       </div>
     </div>
   </div>
+
   <div id="status-bar">
     <div class="status-block">
-      <div class="status-title">▶ TTS 報時</div>
-      <div id="tts-log" class="cursor">待機中</div>
+      <div class="status-title">▶ TTS 語音日誌</div>
+      <div id="tts-log" class="cursor">系統待機中</div>
     </div>
     <div class="status-block">
-      <div class="status-title">▶ 聲控</div>
+      <div class="status-title">▶ 聲控指令</div>
       <div id="voice-indicator"><div id="voice-dot"></div><span id="voice-status">STANDBY</span></div>
-      <button class="amb-btn" id="voice-btn" onclick="toggleVoice()" style="margin-top:3px;">啟動聆聽</button>
+      <button class="amb-btn" id="voice-btn" onclick="toggleVoice()">啟動聆聽</button>
     </div>
     <div class="status-block">
-      <div class="status-title">▶ 環境音效</div>
-      <div id="ambient-controls">
+      <div class="status-title">▶ 環境白噪音</div>
+      <div>
         <button class="amb-btn" id="btn-rain" onclick="toggleAmbient('rain')">雨聲</button>
-        <button class="amb-btn" id="btn-white" onclick="toggleAmbient('white')">白噪</button>
+        <button class="amb-btn" id="btn-white" onclick="toggleAmbient('white')">底噪</button>
         <button class="amb-btn" onclick="stopAmbient()">靜音</button>
       </div>
     </div>
@@ -138,12 +228,12 @@
 </div>
 
 <script>
-// ── 農曆算法 (原汁原味保留) ──
+// ── 農曆算法 (保留原版完整資料) ──
 const TIAN_GAN=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
 const DI_ZHI=['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
 const ZODIAC=['鼠','牛','虎','兔','龍','蛇','馬','羊','猴','雞','狗','豬'];
 const LUNAR_MONTHS=['正','二','三','四','五','六','七','八','九','十','冬','臘'];
-const LUNAR_DAYS=['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+const LUNAR_DAYS=['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿5','廿六','廿七','廿八','廿九','三十'];
 const LUNAR_DATA=[
   [2000,205,0b1010010101010,8],[2001,124,0b0100101010110,5],[2002,212,0b1010010101010,4],
   [2003,201,0b0101001010101,2],[2004,122,0b1001010010101,2],[2005,209,0b0101101001010,3],
@@ -180,8 +270,7 @@ function getLunarDate(date) {
 }
 
 // ── 系統狀態與定位 ──
-// 預設為台中市北區座標，若 GPS 成功則會被覆蓋
-let currentLat = 24.16, currentLon = 120.68;
+let currentLat = 24.16, currentLon = 120.68; // 預設台中市北區
 let locationName = "臺中市 北區"; 
 let startTime=Date.now(),weatherData=null,aqiData=null;
 let voiceListening=false,recognition=null;
@@ -195,15 +284,11 @@ async function updateLocationName(lat, lon) {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=zh-TW`);
     const data = await res.json();
     if(data && data.address) {
-      const city = data.address.city || data.address.county || "未知城市";
+      const city = data.address.city || data.address.county || "";
       const district = data.address.suburb || data.address.town || data.address.village || "";
-      locationName = `${city} ${district}`.trim();
-    } else {
-      locationName = `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`;
+      locationName = `${city} ${district}`.trim() || locationName;
     }
-  } catch(e) {
-    console.log("反查地址失敗，使用預設/經緯度");
-  }
+  } catch(e) {}
   document.getElementById('loc-display').textContent = locationName;
   updateTicker();
 }
@@ -211,39 +296,31 @@ async function updateLocationName(lat, lon) {
 function initGeolocation() {
   if ("geolocation" in navigator) {
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        currentLat = position.coords.latitude;
-        currentLon = position.coords.longitude;
+      (pos) => {
+        currentLat = pos.coords.latitude;
+        currentLon = pos.coords.longitude;
         document.getElementById('coord-val').textContent = `${currentLat.toFixed(2)}°N ${currentLon.toFixed(2)}°E`;
         updateLocationName(currentLat, currentLon);
         fetchWeather(); 
       },
-      (error) => {
-        console.log("GPS獲取失敗，使用預設座標");
-        document.getElementById('coord-val').textContent = `${currentLat.toFixed(2)}°N ${currentLon.toFixed(2)}°E`;
-        updateLocationName(currentLat, currentLon);
-        fetchWeather();
-      },
+      () => { document.getElementById('coord-val').textContent = `${currentLat.toFixed(2)}°N ${currentLon.toFixed(2)}°E`; updateLocationName(currentLat, currentLon); fetchWeather(); },
       { enableHighAccuracy: true, timeout: 5000 }
     );
   } else {
-    updateLocationName(currentLat, currentLon);
-    fetchWeather();
+    updateLocationName(currentLat, currentLon); fetchWeather();
   }
 }
 
-// ── Matrix 背景 (效能優化版) ──
+// ── Matrix 背景 ──
 (function(){
   const canvas=document.getElementById('bg-canvas');
   const ctx=canvas.getContext('2d');
   let cols,drops=[];
-  const chars='01アイウエオ環境温湿度空氣監視ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const chars='01アイウエオ環境監視ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;cols=Math.floor(canvas.width/14);drops=Array(cols).fill(1);}
   function draw(){
-    ctx.fillStyle='rgba(5,15,5,0.04)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#00ff41';
-    ctx.font='12px monospace';
+    ctx.fillStyle='rgba(5,15,5,0.04)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#00ff41'; ctx.font='12px monospace';
     for(let i=0;i<drops.length;i++){
       ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*14,drops[i]*14);
       if(drops[i]*14>canvas.height&&Math.random()>0.975)drops[i]=0;
@@ -251,11 +328,10 @@ function initGeolocation() {
     }
     requestAnimationFrame(draw);
   }
-  resize();window.addEventListener('resize',resize);
-  requestAnimationFrame(draw);
+  resize(); window.addEventListener('resize',resize); requestAnimationFrame(draw);
 })();
 
-// ── 時鐘 ──
+// ── 時鐘更新 ──
 const WEEKDAYS=['日','一','二','三','四','五','六'];
 function updateClock(){
   const now=new Date();
@@ -267,29 +343,27 @@ function updateClock(){
   checkTTSSchedule(now);
 }
 
-// ── TTS ──
+// ── TTS 語音 ──
 function enqueueTTS(text,priority=false){if(priority)ttsQueue.unshift(text);else ttsQueue.push(text);processTTSQueue();}
 function processTTSQueue(){if(isSpeaking||ttsQueue.length===0)return;speakText(ttsQueue.shift());}
 function speakText(text){
   if(!('speechSynthesis' in window))return;
   window.speechSynthesis.cancel();isSpeaking=true;
   const logEl=document.getElementById('tts-log');logEl.textContent='▶ '+text;logEl.classList.add('active');
-  const u=new SpeechSynthesisUtterance(text);u.lang='zh-TW';u.rate=0.9;u.pitch=0.85;u.volume=0.9;
-  const voices=window.speechSynthesis.getVoices();
-  const v=voices.find(v=>v.lang==='zh-TW')||voices.find(v=>v.lang.startsWith('zh'));if(v)u.voice=v;
-  u.onend=()=>{isSpeaking=false;logEl.classList.remove('active');logEl.textContent='待機中';setTimeout(processTTSQueue,400);};
-  u.onerror=()=>{isSpeaking=false;logEl.classList.remove('active');logEl.textContent='待機中';};
+  const u=new SpeechSynthesisUtterance(text);u.lang='zh-TW';u.rate=0.9;
+  u.onend=()=>{isSpeaking=false;logEl.classList.remove('active');logEl.textContent='系統待機中';setTimeout(processTTSQueue,400);};
+  u.onerror=()=>{isSpeaking=false;logEl.classList.remove('active');logEl.textContent='語音錯誤';};
   window.speechSynthesis.speak(u);
 }
 function checkTTSSchedule(now){
   const h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
-  if(m===0&&s===0&&h!==lastAnnouncedHour){lastAnnouncedHour=h;lastAnnouncedHalf=false;const period=h<12?'上午':h<18?'下午':'晚上';let msg=`現在${period}${h%12||12}點整。`;if(weatherData)msg+=`氣溫${Math.round(weatherData.temp)}度，${weatherData.desc}。`;enqueueTTS(msg);}
-  if(m===30&&s===0&&!lastAnnouncedHalf){lastAnnouncedHalf=true;const period=h<12?'上午':h<18?'下午':'晚上';enqueueTTS(`${period}${h%12||12}點三十分。`);}
+  if(m===0&&s===0&&h!==lastAnnouncedHour){lastAnnouncedHour=h;lastAnnouncedHalf=false;const p=h<12?'上午':h<18?'下午':'晚上';let msg=`現在${p}${h%12||12}點整。`;if(weatherData)msg+=`氣溫${Math.round(weatherData.temp)}度。`;enqueueTTS(msg);}
+  if(m===30&&s===0&&!lastAnnouncedHalf){lastAnnouncedHalf=true;const p=h<12?'上午':h<18?'下午':'晚上';enqueueTTS(`${p}${h%12||12}點三十分。`);}
 }
 
-// ── 天氣 API ──
+// ── API: 天氣 ──
 const WMO_ICONS={0:'☀',1:'🌤',2:'⛅',3:'☁',45:'🌫',51:'🌦',53:'🌧',55:'🌧',61:'🌧',63:'🌧',65:'🌧',71:'🌨',80:'🌦',81:'🌧',82:'⛈',95:'⛈'};
-const WMO_DESC={0:'晴天',1:'晴時多雲',2:'多雲',3:'陰天',45:'霧',51:'毛毛雨',53:'小雨',55:'雨',61:'小雨',63:'中雨',65:'大雨',71:'小雪',80:'陣雨',81:'大陣雨',82:'暴雨',95:'雷雨'};
+const WMO_DESC={0:'晴天',1:'晴時多雲',2:'多雲',3:'陰天',45:'起霧',51:'毛毛雨',53:'小雨',55:'大雨',61:'小雨',63:'中雨',65:'大雨',71:'小雪',80:'陣雨',81:'大陣雨',82:'暴雨',95:'雷雨'};
 async function fetchWeather(){
   try{
     const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${currentLat}&longitude=${currentLon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kmh&timezone=Asia%2FTaipei`);
@@ -310,16 +384,10 @@ async function fetchWeather(){
     document.getElementById('bar-humid').style.width=weatherData.humid+'%';
     document.getElementById('bar-wind').style.width=Math.min(100,weatherData.wind*2)+'%';
     updateTicker();
-  }catch(e){useMockWeather();}
-}
-function useMockWeather(){
-  weatherData={temp:28,feel:32,humid:72,wind:15,wdir:45,code:2,desc:'多雲'};
-  ['val-temp','val-feel','val-humid','val-wind'].forEach((id,i)=>document.getElementById(id).textContent=['28','32','72','15'][i]);
-  document.getElementById('val-desc').textContent='多雲';document.getElementById('val-wdir').textContent='東北';document.getElementById('wx-icon').textContent='⛅';
-  document.getElementById('bar-temp').style.width='76%';document.getElementById('bar-humid').style.width='72%';document.getElementById('bar-wind').style.width='30%';
+  }catch(e){}
 }
 
-// ── AQI API ──
+// ── API: 空氣品質 ──
 async function fetchAQI(){
   try{
     const r=await fetch('https://data.moenv.gov.tw/api/v2/aqx_p_432?api_key=e8dd42e6-9b8b-43f8-991e-b3dee723a52d&limit=1&query=siteName,大安&format=JSON');
@@ -330,82 +398,56 @@ async function fetchAQI(){
     document.getElementById('bar-aqi').style.width=Math.min(100,aqi/3)+'%';
     document.getElementById('panel-aqi').className='data-panel '+(aqi<=50?'aqi-good':aqi<=100?'aqi-moderate':aqi<=150?'aqi-unhealthy':'aqi-hazardous');
     aqiData={aqi,pm25};updateTicker();
-  }catch(e){document.getElementById('val-aqi').textContent='42';document.getElementById('aqi-label').textContent='PM2.5:8.2';aqiData={aqi:42,pm25:8.2};}
+  }catch(e){ document.getElementById('val-aqi').textContent='--'; }
 }
 
-// ── 依要求：流水線開頭加入定位名稱 ──
+// ── Ticker 流水線更新 ──
 function updateTicker(){
   const wx=weatherData,aq=aqiData;let parts=[];
   if(wx)parts.push(`${locationName} 氣溫 ${Math.round(wx.temp)}°C // 體感 ${Math.round(wx.feel)}°C // 濕度 ${Math.round(wx.humid)}% // 風速 ${Math.round(wx.wind)} km/h // ${wx.desc}`);
   if(aq)parts.push(`AQI ${aq.aqi} // PM2.5 ${aq.pm25} μg/m³ // ${aq.aqi<=50?'空氣良好':aq.aqi<=100?'普通':'注意健康'}`);
-  parts.push('ENV-MONITOR v4.2.2 // ALL SYSTEMS NOMINAL');
+  parts.push('ENV-MONITOR v4.2.3 // ALL SYSTEMS NOMINAL');
   document.getElementById('ticker').textContent='// '+parts.join(' // ')+' //';
 }
 
-// ── 聲控 ──
+// ── 聲控與音效系統 ──
 function toggleVoice(){
   if(voiceListening){stopVoice();return;}
-  if(window.AndroidBridge&&window.AndroidBridge.requestMicPermission){
-    window.AndroidBridge.requestMicPermission();
-  }
-  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){
-    document.getElementById('voice-status').textContent='不支援';return;
-  }
+  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)){document.getElementById('voice-status').textContent='不支援';return;}
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  recognition=new SR();recognition.lang='zh-TW';recognition.continuous=true;recognition.interimResults=false;
+  recognition=new SR();recognition.lang='zh-TW';recognition.continuous=true;
   recognition.onstart=()=>{voiceListening=true;document.getElementById('voice-indicator').className='listening';document.getElementById('voice-status').textContent='聆聽中...';document.getElementById('voice-btn').textContent='停止';};
-  recognition.onresult=(event)=>{
-    const t=event.results[event.results.length-1][0].transcript.trim();
+  recognition.onresult=(e)=>{
+    const t=e.results[e.results.length-1][0].transcript.trim();
     document.getElementById('voice-indicator').className='heard';document.getElementById('voice-status').textContent=t;
     if(/幾點|時間|報時/.test(t)){const n=new Date(),h=n.getHours(),m=n.getMinutes();enqueueTTS(`現在${h<12?'上午':h<18?'下午':'晚上'}${h%12||12}點${m>0?m+'分':'整'}。`,true);}
-    else if(/天氣|氣溫|溫度/.test(t)){if(weatherData)enqueueTTS(`目前氣溫${Math.round(weatherData.temp)}度，體感${Math.round(weatherData.feel)}度，${weatherData.desc}，濕度${Math.round(weatherData.humid)}百分比。`,true);}
-    else if(/空氣|AQI|PM/.test(t)){if(aqiData)enqueueTTS(`目前空氣品質指數${aqiData.aqi}，PM2.5為${aqiData.pm25}微克每立方公尺。${aqiData.aqi<=50?'空氣良好。':'建議減少戶外活動。'}`,true);}
+    else if(/天氣|氣溫/.test(t)&&weatherData)enqueueTTS(`氣溫${Math.round(weatherData.temp)}度，${weatherData.desc}，濕度${Math.round(weatherData.humid)}百分比。`,true);
     else if(/下雨|雨聲/.test(t))toggleAmbient('rain');
-    else if(/安靜|靜音|關閉/.test(t))stopAmbient();
-    else if(/重新整理|更新資料/.test(t)){fetchWeather();fetchAQI();}
-    setTimeout(()=>{document.getElementById('voice-indicator').className='listening';document.getElementById('voice-status').textContent='聆聽中...';},2500);
+    else if(/安靜|靜音/.test(t))stopAmbient();
+    setTimeout(()=>{if(voiceListening){document.getElementById('voice-indicator').className='listening';document.getElementById('voice-status').textContent='聆聽中...';}},2500);
   };
-  recognition.onerror=(e)=>{if(e.error!=='no-speech'){voiceListening=false;document.getElementById('voice-indicator').className='';document.getElementById('voice-status').textContent='錯誤';document.getElementById('voice-btn').textContent='啟動聆聽';}};
+  recognition.onerror=(e)=>{if(e.error!=='no-speech')stopVoice();};
   recognition.onend=()=>{if(voiceListening)recognition.start();};
   recognition.start();
 }
 function stopVoice(){voiceListening=false;if(recognition)recognition.stop();document.getElementById('voice-indicator').className='';document.getElementById('voice-status').textContent='STANDBY';document.getElementById('voice-btn').textContent='啟動聆聽';}
 
-// ── 環境音效 ──
 function getAudioCtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
-function stopAmbient(){Object.values(ambientNodes).forEach(n=>{try{n.gainNode.gain.setTargetAtTime(0,getAudioCtx().currentTime,0.5);}catch(e){}setTimeout(()=>{try{n.source.stop();}catch(e){}},800);});ambientNodes={};document.querySelectorAll('.amb-btn').forEach(b=>b.classList.remove('active'));}
+function stopAmbient(){Object.values(ambientNodes).forEach(n=>{try{n.gainNode.gain.setTargetAtTime(0,getAudioCtx().currentTime,0.5);}catch(e){}setTimeout(()=>n.source.stop(),800);});ambientNodes={};document.querySelectorAll('.amb-btn').forEach(b=>b.classList.remove('active'));}
 function toggleAmbient(type){
-  if(ambientNodes[type]){const n=ambientNodes[type];n.gainNode.gain.setTargetAtTime(0,getAudioCtx().currentTime,0.5);setTimeout(()=>{try{n.source.stop();}catch(e){}},800);delete ambientNodes[type];document.getElementById('btn-'+type).classList.remove('active');return;}
+  if(ambientNodes[type]){stopAmbient();return;}
   const ctx=getAudioCtx();const gainNode=ctx.createGain();gainNode.gain.setValueAtTime(0,ctx.currentTime);gainNode.gain.setTargetAtTime(0.4,ctx.currentTime,1.5);gainNode.connect(ctx.destination);
-  if(type==='rain'){
-    const buf=ctx.createBuffer(2,ctx.sampleRate*4,ctx.sampleRate);
-    for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*0.8;}
-    const src=ctx.createBufferSource();src.buffer=buf;src.loop=true;
-    const f1=ctx.createBiquadFilter();f1.type='bandpass';f1.frequency.value=3000;f1.Q.value=0.3;
-    const f2=ctx.createBiquadFilter();f2.type='highpass';f2.frequency.value=800;
-    src.connect(f1);f1.connect(f2);f2.connect(gainNode);src.start();
-    const iv=setInterval(()=>{if(!ambientNodes[type]){clearInterval(iv);return;}const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(1200+Math.random()*400,ctx.currentTime);o.frequency.exponentialRampToValueAtTime(400,ctx.currentTime+0.15);g.gain.setValueAtTime(0.15,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.2);o.connect(g);g.connect(gainNode);o.start();o.stop(ctx.currentTime+0.2);},400+Math.random()*600);
-    ambientNodes[type]={source:src,gainNode};
-  }else if(type==='white'){
-    const buf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
-    const src=ctx.createBufferSource();src.buffer=buf;src.loop=true;
-    const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=1200;
-    src.connect(f);f.connect(gainNode);src.start();ambientNodes[type]={source:src,gainNode};
-  }
+  const buf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const src=ctx.createBufferSource();src.buffer=buf;src.loop=true;
+  const f=ctx.createBiquadFilter();f.type=type==='rain'?'bandpass':'lowpass';f.frequency.value=type==='rain'?3000:1000;
+  src.connect(f);f.connect(gainNode);src.start();ambientNodes[type]={source:src,gainNode};
   document.getElementById('btn-'+type).classList.add('active');
 }
 
-// ── 啟動 ──
+// ── 初始化 ──
 setInterval(updateClock,1000);updateClock();
-initGeolocation(); // 啟動時取得座標並反查縣市
-fetchAQI();
+initGeolocation(); fetchAQI();
 setInterval(fetchWeather,5*60*1000);setInterval(fetchAQI,5*60*1000);
-if('speechSynthesis' in window){window.speechSynthesis.onvoiceschanged=()=>{};setTimeout(()=>window.speechSynthesis.getVoices(),500);}
-setTimeout(()=>{const h=new Date().getHours();enqueueTTS(`${h<6?'深夜好':h<12?'早安':h<18?'午安':'晚安'}，環境監控終端機已啟動。`);},1800);
-
-function onPermissionGranted(type){
-  if(type==='mic') toggleVoice();
-}
 </script>
 </body>
 </html>
