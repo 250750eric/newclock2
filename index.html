@@ -27,7 +27,7 @@
   /* Ticker - 橙色 */
   #ticker-wrap { overflow: hidden; border: 1px solid #7a3a00; padding: 4px 0; background: rgba(255,140,0,0.04); }
   #ticker { white-space: nowrap; font-size: 10px; color: #cc6600; letter-spacing: 2px; animation: scroll-ticker 30s linear infinite; display: inline-block; }
-  @keyframes scroll-ticker { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+  @keyframes scroll-ticker { 0%{transform:translateX(100vw)} 100%{transform:translateX(-100%)} }
 
   /* 四格面板 - 橙色 */
   #data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px 0; }
@@ -75,7 +75,7 @@
 <div id="terminal">
   <div id="header">
     <span id="sys-id">ENV-MONITOR v4.2.2</span>
-    <span>25.03°N 121.57°E // TAIPEI</span>
+    <span><span id="coord-val">24.16°N 120.68°E</span> // <span id="loc-display">定位中...</span></span>
     <span>UP: <span id="uptime-val">00:00:00</span></span>
   </div>
   <div>
@@ -138,7 +138,7 @@
 </div>
 
 <script>
-// ── 農曆算法 ──
+// ── 農曆算法 (原汁原味保留) ──
 const TIAN_GAN=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
 const DI_ZHI=['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
 const ZODIAC=['鼠','牛','虎','兔','龍','蛇','馬','羊','猴','雞','狗','豬'];
@@ -158,40 +158,101 @@ const LUNAR_DATA=[
   [2030,203,0b1010010101010,0],
 ];
 function getLunarDate(date) {
-  const y=date.getFullYear(),m=date.getMonth()+1,d=date.getDate();
-  let row=LUNAR_DATA.find(r=>r[0]===y);
-  const sfMM=Math.floor(row[1]/100),sfDD=row[1]%100;
-  let lunarYear=y;
-  if(m<sfMM||(m===sfMM&&d<sfDD)){lunarYear=y-1;row=LUNAR_DATA.find(r=>r[0]===lunarYear);}
-  const sfMM2=Math.floor(row[1]/100),sfDD2=row[1]%100;
-  const springFestDate=new Date(lunarYear,sfMM2-1,sfDD2);
-  let dayOfYear=Math.floor((date-springFestDate)/86400000);
-  const leapMonth=row[3],numMonths=leapMonth>0?13:12,bits=row[2],days=[];
-  for(let i=0;i<numMonths;i++)days.push((bits>>(numMonths-1-i))&1?29:30);
-  let remaining=dayOfYear,lunarMonth=1,monthCount=0;
-  for(let i=0;i<days.length;i++){if(remaining<days[i])break;remaining-=days[i];monthCount++;lunarMonth=leapMonth>0&&monthCount>leapMonth?monthCount-1:monthCount+1;}
-  if(lunarMonth<1)lunarMonth=1;if(lunarMonth>12)lunarMonth=12;
-  const ganIdx=((lunarYear-4)%10+10)%10,zhiIdx=((lunarYear-4)%12+12)%12;
-  return `${TIAN_GAN[ganIdx]}${DI_ZHI[zhiIdx]}${ZODIAC[zhiIdx]}年 ${LUNAR_MONTHS[lunarMonth-1]}月${LUNAR_DAYS[remaining]}`;
+  try {
+    const y=date.getFullYear(),m=date.getMonth()+1,d=date.getDate();
+    let row=LUNAR_DATA.find(r=>r[0]===y);
+    if(!row) return "資料超出範圍";
+    const sfMM=Math.floor(row[1]/100),sfDD=row[1]%100;
+    let lunarYear=y;
+    if(m<sfMM||(m===sfMM&&d<sfDD)){lunarYear=y-1;row=LUNAR_DATA.find(r=>r[0]===lunarYear);}
+    if(!row) return "資料超出範圍";
+    const sfMM2=Math.floor(row[1]/100),sfDD2=row[1]%100;
+    const springFestDate=new Date(lunarYear,sfMM2-1,sfDD2);
+    let dayOfYear=Math.floor((date-springFestDate)/86400000);
+    const leapMonth=row[3],numMonths=leapMonth>0?13:12,bits=row[2],days=[];
+    for(let i=0;i<numMonths;i++)days.push((bits>>(numMonths-1-i))&1?29:30);
+    let remaining=dayOfYear,lunarMonth=1,monthCount=0;
+    for(let i=0;i<days.length;i++){if(remaining<days[i])break;remaining-=days[i];monthCount++;lunarMonth=leapMonth>0&&monthCount>leapMonth?monthCount-1:monthCount+1;}
+    if(lunarMonth<1)lunarMonth=1;if(lunarMonth>12)lunarMonth=12;
+    const ganIdx=((lunarYear-4)%10+10)%10,zhiIdx=((lunarYear-4)%12+12)%12;
+    return `${TIAN_GAN[ganIdx]}${DI_ZHI[zhiIdx]}${ZODIAC[zhiIdx]}年 ${LUNAR_MONTHS[lunarMonth-1]}月${LUNAR_DAYS[remaining]}`;
+  } catch(e) { return "計算錯誤"; }
 }
 
-// ── 系統狀態 ──
-const LAT=25.033,LON=121.565;
+// ── 系統狀態與定位 ──
+// 預設為台中市北區座標，若 GPS 成功則會被覆蓋
+let currentLat = 24.16, currentLon = 120.68;
+let locationName = "臺中市 北區"; 
 let startTime=Date.now(),weatherData=null,aqiData=null;
 let voiceListening=false,recognition=null;
 let audioCtx=null,ambientNodes={};
 let lastAnnouncedHour=-1,lastAnnouncedHalf=false;
 let ttsQueue=[],isSpeaking=false;
 
-// ── Matrix 背景 ──
+// ── GPS 與 地理反查 ──
+async function updateLocationName(lat, lon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&accept-language=zh-TW`);
+    const data = await res.json();
+    if(data && data.address) {
+      const city = data.address.city || data.address.county || "未知城市";
+      const district = data.address.suburb || data.address.town || data.address.village || "";
+      locationName = `${city} ${district}`.trim();
+    } else {
+      locationName = `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`;
+    }
+  } catch(e) {
+    console.log("反查地址失敗，使用預設/經緯度");
+  }
+  document.getElementById('loc-display').textContent = locationName;
+  updateTicker();
+}
+
+function initGeolocation() {
+  if ("geolocation" in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        currentLat = position.coords.latitude;
+        currentLon = position.coords.longitude;
+        document.getElementById('coord-val').textContent = `${currentLat.toFixed(2)}°N ${currentLon.toFixed(2)}°E`;
+        updateLocationName(currentLat, currentLon);
+        fetchWeather(); 
+      },
+      (error) => {
+        console.log("GPS獲取失敗，使用預設座標");
+        document.getElementById('coord-val').textContent = `${currentLat.toFixed(2)}°N ${currentLon.toFixed(2)}°E`;
+        updateLocationName(currentLat, currentLon);
+        fetchWeather();
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  } else {
+    updateLocationName(currentLat, currentLon);
+    fetchWeather();
+  }
+}
+
+// ── Matrix 背景 (效能優化版) ──
 (function(){
   const canvas=document.getElementById('bg-canvas');
   const ctx=canvas.getContext('2d');
   let cols,drops=[];
   const chars='01アイウエオ環境温湿度空氣監視ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;cols=Math.floor(canvas.width/14);drops=Array(cols).fill(1);}
-  function draw(){ctx.fillStyle='rgba(5,15,5,0.04)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#00ff41';ctx.font='12px monospace';for(let i=0;i<drops.length;i++){ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*14,drops[i]*14);if(drops[i]*14>canvas.height&&Math.random()>0.975)drops[i]=0;drops[i]++;}}
-  resize();window.addEventListener('resize',resize);setInterval(draw,60);
+  function draw(){
+    ctx.fillStyle='rgba(5,15,5,0.04)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#00ff41';
+    ctx.font='12px monospace';
+    for(let i=0;i<drops.length;i++){
+      ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*14,drops[i]*14);
+      if(drops[i]*14>canvas.height&&Math.random()>0.975)drops[i]=0;
+      drops[i]++;
+    }
+    requestAnimationFrame(draw);
+  }
+  resize();window.addEventListener('resize',resize);
+  requestAnimationFrame(draw);
 })();
 
 // ── 時鐘 ──
@@ -231,7 +292,7 @@ const WMO_ICONS={0:'☀',1:'🌤',2:'⛅',3:'☁',45:'🌫',51:'🌦',53:'🌧',
 const WMO_DESC={0:'晴天',1:'晴時多雲',2:'多雲',3:'陰天',45:'霧',51:'毛毛雨',53:'小雨',55:'雨',61:'小雨',63:'中雨',65:'大雨',71:'小雪',80:'陣雨',81:'大陣雨',82:'暴雨',95:'雷雨'};
 async function fetchWeather(){
   try{
-    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kmh&timezone=Asia%2FTaipei`);
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${currentLat}&longitude=${currentLon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kmh&timezone=Asia%2FTaipei`);
     const d=await r.json();const c=d.current;
     weatherData={temp:c.temperature_2m,feel:c.apparent_temperature,humid:c.relative_humidity_2m,wind:c.wind_speed_10m,wdir:c.wind_direction_10m,code:c.weather_code,desc:WMO_DESC[c.weather_code]||'未知'};
     document.getElementById('val-temp').textContent=Math.round(weatherData.temp);
@@ -272,18 +333,18 @@ async function fetchAQI(){
   }catch(e){document.getElementById('val-aqi').textContent='42';document.getElementById('aqi-label').textContent='PM2.5:8.2';aqiData={aqi:42,pm25:8.2};}
 }
 
+// ── 依要求：流水線開頭加入定位名稱 ──
 function updateTicker(){
   const wx=weatherData,aq=aqiData;let parts=[];
-  if(wx)parts.push(`氣溫 ${Math.round(wx.temp)}°C // 體感 ${Math.round(wx.feel)}°C // 濕度 ${Math.round(wx.humid)}% // 風速 ${Math.round(wx.wind)} km/h // ${wx.desc}`);
+  if(wx)parts.push(`${locationName} 氣溫 ${Math.round(wx.temp)}°C // 體感 ${Math.round(wx.feel)}°C // 濕度 ${Math.round(wx.humid)}% // 風速 ${Math.round(wx.wind)} km/h // ${wx.desc}`);
   if(aq)parts.push(`AQI ${aq.aqi} // PM2.5 ${aq.pm25} μg/m³ // ${aq.aqi<=50?'空氣良好':aq.aqi<=100?'普通':'注意健康'}`);
-  parts.push('TAIPEI // ENV-MONITOR v4.2.2 // ALL SYSTEMS NOMINAL');
+  parts.push('ENV-MONITOR v4.2.2 // ALL SYSTEMS NOMINAL');
   document.getElementById('ticker').textContent='// '+parts.join(' // ')+' //';
 }
 
-// ── 聲控（Android WebView 需要 RECORD_AUDIO 權限）──
+// ── 聲控 ──
 function toggleVoice(){
   if(voiceListening){stopVoice();return;}
-  // Android 原生橋接：通知 Java 層請求麥克風權限
   if(window.AndroidBridge&&window.AndroidBridge.requestMicPermission){
     window.AndroidBridge.requestMicPermission();
   }
@@ -336,12 +397,12 @@ function toggleAmbient(type){
 
 // ── 啟動 ──
 setInterval(updateClock,1000);updateClock();
-fetchWeather();fetchAQI();
+initGeolocation(); // 啟動時取得座標並反查縣市
+fetchAQI();
 setInterval(fetchWeather,5*60*1000);setInterval(fetchAQI,5*60*1000);
 if('speechSynthesis' in window){window.speechSynthesis.onvoiceschanged=()=>{};setTimeout(()=>window.speechSynthesis.getVoices(),500);}
 setTimeout(()=>{const h=new Date().getHours();enqueueTTS(`${h<6?'深夜好':h<12?'早安':h<18?'午安':'晚安'}，環境監控終端機已啟動。`);},1800);
 
-// ── Android 橋接：Java 呼叫此函式通知權限結果 ──
 function onPermissionGranted(type){
   if(type==='mic') toggleVoice();
 }
