@@ -1,299 +1,165 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#050f05">
-<title>ENV-TERMINAL-X</title>
+<title>ENV-MONITOR</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #050f05; color: #00ff41; font-family: 'Share Tech Mono', monospace; min-height: 100vh; overflow: hidden; position: relative; }
-  
-  /* 視覺特效層 */
-  .crt-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,0.03) 2px, rgba(0,255,65,0.03) 4px); pointer-events: none; z-index: 1000; }
-  .vignette { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.8) 100%); pointer-events: none; z-index: 999; }
-  
-  #terminal { width: 100%; min-height: 100vh; padding: 16px; display: grid; grid-template-rows: auto 1fr auto; gap: 8px; position: relative; z-index: 10; }
+  body { background: #050f05; color: #00ff41; font-family: 'Share Tech Mono', monospace, Courier, monospace; min-height: 100vh; overflow: hidden; position: relative; }
+  body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px); pointer-events: none; z-index: 1000; }
+  body::after { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%); pointer-events: none; z-index: 999; }
+  #terminal { width: 100%; min-height: 100vh; padding: 16px; display: grid; grid-template-rows: auto 1fr auto; gap: 10px; position: relative; }
 
-  /* Header */
-  #header { display: flex; justify-content: space-between; border-bottom: 1px solid #00aa2a; padding-bottom: 6px; font-size: 10px; color: #00aa2a; }
-  .sys-info { display: flex; gap: 15px; }
-  #loc-val { color: #ff8c00; }
+  /* Header - 綠色 */
+  #header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #00aa2a; padding-bottom: 8px; font-size: 10px; color: #00aa2a; letter-spacing: 2px; flex-wrap: wrap; gap: 4px; }
+  #sys-id { font-size: 11px; color: #00ff41; }
 
-  /* 主顯示區 */
-  #clock-section { display: flex; flex-direction: column; align-items: center; padding: 10px 0; }
-  #time-display { font-family: 'VT323', monospace; font-size: clamp(70px, 20vw, 150px); color: #00ff41; text-shadow: 0 0 15px #00ff41; line-height: 0.9; animation: glitch 10s infinite; }
-  #date-display { font-size: 14px; color: #00cc33; letter-spacing: 2px; margin-top: 8px; }
-  #lunar-details { font-size: 12px; color: #00aa2a; margin-top: 4px; display: flex; gap: 10px; }
-  .solar-term { color: #ff8c00; font-weight: bold; }
+  /* 時鐘區 - 綠色 */
+  #clock-section { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; }
+  #time-display { font-family: 'VT323', monospace; font-size: clamp(60px, 18vw, 130px); color: #00ff41; letter-spacing: 4px; text-shadow: 0 0 20px #00ff41, 0 0 40px #00aa2a; line-height: 1; animation: flicker 8s infinite; }
+  @keyframes flicker { 0%,98%,100%{opacity:1} 98.5%{opacity:0.92} 99%{opacity:1} 99.5%{opacity:0.88} }
+  #date-display { font-size: 13px; color: #00cc33; letter-spacing: 3px; margin-top: 4px; text-shadow: 0 0 10px #00aa2a; }
+  #lunar-display { font-size: 11px; color: #00aa2a; letter-spacing: 2px; margin-top: 4px; }
 
-  /* 跑馬燈 */
-  #ticker-wrap { background: rgba(0,255,65,0.05); border: 1px solid #004411; margin: 8px 0; height: 24px; display: flex; align-items: center; overflow: hidden; }
-  #ticker { white-space: nowrap; font-size: 11px; animation: scroll-ticker 25s linear infinite; }
-  @keyframes scroll-ticker { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+  /* Ticker - 橙色 */
+  #ticker-wrap { overflow: hidden; border: 1px solid #7a3a00; padding: 4px 0; background: rgba(255,140,0,0.04); }
+  #ticker { white-space: nowrap; font-size: 10px; color: #cc6600; letter-spacing: 2px; animation: scroll-ticker 30s linear infinite; display: inline-block; }
+  @keyframes scroll-ticker { 0%{transform:translateX(100vw)} 100%{transform:translateX(-100%)} }
 
-  /* 數據面板 */
-  #data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .panel { border: 1px solid #004411; padding: 10px; background: rgba(0,0,0,0.4); position: relative; transition: all 0.3s; }
-  .panel.alert { border-color: #ff4400; background: rgba(255,68,0,0.05); }
-  .p-label { font-size: 9px; color: #008822; margin-bottom: 6px; }
-  .p-value { font-family: 'VT323', monospace; font-size: 36px; color: #00ff41; }
-  .p-unit { font-size: 10px; color: #008822; margin-left: 4px; }
-  .progress-bg { height: 4px; background: #002205; margin-top: 8px; }
-  .progress-fill { height: 100%; background: #00ff41; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px #00ff41; }
+  /* 四格面板 - 橙色 */
+  #data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px 0; }
+  .data-panel { border: 1px solid #7a3a00; padding: 8px; background: rgba(255,140,0,0.04); position: relative; overflow: hidden; }
+  .data-panel::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #ff8c00; opacity: 0.5; }
+  .panel-label { font-size: 8px; color: #7a3a00; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .panel-value { font-family: 'VT323', monospace; font-size: clamp(24px, 5vw, 32px); color: #ff8c00; line-height: 1; text-shadow: 0 0 8px #ff6600; }
+  .panel-unit { font-size: 9px; color: #cc5500; margin-top: 2px; }
+  .panel-bar { height: 3px; background: #3d1a00; margin-top: 4px; overflow: hidden; }
+  .panel-bar-fill { height: 100%; background: #ff8c00; transition: width 1s ease; box-shadow: 0 0 4px #ff6600; }
+  .aqi-good .panel-value { color: #ff8c00; text-shadow: 0 0 8px #ff6600; }
+  .aqi-moderate .panel-value { color: #ffcc00; text-shadow: 0 0 8px #ffaa00; }
+  .aqi-unhealthy .panel-value { color: #ff4400; text-shadow: 0 0 8px #ff2200; }
+  .aqi-hazardous .panel-value { color: #ff0000; text-shadow: 0 0 8px #cc0000; }
 
-  /* 狀態控制列 */
-  #status-bar { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; border-top: 1px solid #004411; padding-top: 10px; }
-  .status-box { font-size: 11px; background: rgba(0,20,0,0.3); padding: 6px; border: 1px solid #002205; }
-  .label-tag { font-size: 8px; background: #004411; color: #00ff41; padding: 1px 4px; margin-right: 5px; }
-  
-  /* 按鈕樣式 */
-  .cmd-btn { background: none; border: 1px solid #008822; color: #008822; font-family: 'Share Tech Mono'; font-size: 9px; padding: 4px 8px; cursor: pointer; margin: 2px; }
-  .cmd-btn:hover, .cmd-btn.active { background: #00ff41; color: #050f05; box-shadow: 0 0 10px #00ff41; }
+  /* 底部狀態列 - 橙色 */
+  #status-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; border-top: 1px solid #7a3a00; padding-top: 8px; }
+  .status-block { font-size: 10px; color: #cc6600; letter-spacing: 1px; }
+  .status-block .status-title { color: #7a3a00; font-size: 8px; letter-spacing: 2px; margin-bottom: 3px; }
+  #tts-log { font-size: 10px; color: #cc6600; min-height: 14px; letter-spacing: 1px; word-break: break-all; }
+  #tts-log.active { color: #ff8c00; text-shadow: 0 0 6px #ff6600; animation: blink-text 0.5s infinite; }
+  @keyframes blink-text { 50%{opacity:0.6} }
+  #voice-indicator { display: flex; align-items: center; gap: 6px; font-size: 9px; color: #7a3a00; letter-spacing: 1px; }
+  #voice-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d1a00; transition: all 0.3s; flex-shrink: 0; }
+  #voice-indicator.listening #voice-dot { background: #ff8c00; box-shadow: 0 0 8px #ff6600; animation: pulse-dot 1s infinite; }
+  #voice-indicator.heard #voice-dot { background: #ffff00; box-shadow: 0 0 8px #ffff00; }
+  @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
+  #ambient-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .amb-btn { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #7a3a00; border: 1px solid #3d1a00; background: none; padding: 3px 6px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s; }
+  .amb-btn:hover, .amb-btn.active { color: #ff8c00; border-color: #cc5500; background: rgba(255,140,0,0.07); text-shadow: 0 0 4px #ff6600; }
+  .cursor::after { content: '_'; animation: blink 1s step-end infinite; color: #ff8c00; }
+  @keyframes blink { 50%{opacity:0} }
+  .wx-icon { font-size: 16px; line-height: 1; margin-bottom: 2px; }
 
-  @keyframes glitch { 0%, 90% { transform: none; opacity: 1; } 92% { transform: skewX(10deg); opacity: 0.8; } 94% { transform: skewX(-10deg); } 96% { transform: none; } }
-
-  @media (max-width: 600px) {
+  /* 手機橫豎螢幕適配 */
+  @media (max-width: 480px) {
     #data-grid { grid-template-columns: repeat(2, 1fr); }
-    #status-bar { grid-template-columns: 1fr; }
+    #status-bar { grid-template-columns: 1fr; gap: 6px; }
+    #header { font-size: 9px; }
   }
 </style>
 </head>
 <body>
-<div class="crt-overlay"></div>
-<div class="vignette"></div>
-<canvas id="bg-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;opacity:0.15;"></canvas>
-
+<canvas id="bg-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.12;"></canvas>
 <div id="terminal">
   <div id="header">
-    <div class="sys-info">
-      <span>[TERMINAL_READY]</span>
-      <span>LOC: <span id="loc-val">TAICHUNG, TW</span></span>
-      <span>PWR: <span id="pwr-val">--%</span></span>
-    </div>
-    <div class="sys-info">
-      <span>UPTIME: <span id="uptime-val">00:00:00</span></span>
-    </div>
+    <span id="sys-id">ENV-MONITOR v4.2.2</span>
+    <span><span id="coord-val">24.16°N 120.68°E</span> // <span id="loc-display">定位中...</span></span>
+    <span>UP: <span id="uptime-val">00:00:00</span></span>
   </div>
-
-  <div id="main-display">
+  <div>
     <div id="clock-section">
       <div id="time-display">00:00:00</div>
-      <div id="date-display">2026-04-26 [SUN]</div>
-      <div id="lunar-details">
-        <span id="lunar-val">農曆 --月--</span>
-        <span id="term-val" class="solar-term"></span>
-      </div>
+      <div id="date-display">---- -- -- [---]</div>
+      <div id="lunar-display">農曆 載入中...</div>
     </div>
-
-    <div id="ticker-wrap"><div id="ticker">SYSTEM BOOTING... INITIALIZING SENSORS...</div></div>
-
-    <div id="data-grid">
-      <div class="panel">
-        <div class="p-label">◈ TEMPERATURE</div>
-        <div><span class="p-value" id="v-temp">--</span><span class="p-unit">°C</span></div>
-        <div class="progress-bg"><div class="progress-fill" id="b-temp" style="width: 0%"></div></div>
+    <div id="ticker-wrap"><span id="ticker">// 系統啟動中 //</span></div>
+    <div id="data-grid" style="margin-top:6px;">
+      <div class="data-panel" id="panel-temp">
+        <div class="panel-label">■ 氣溫 TEMP</div>
+        <div class="wx-icon" id="wx-icon">◈</div>
+        <div class="panel-value" id="val-temp">--</div>
+        <div class="panel-unit">°C / <span id="val-feel">--</span>°C 體感</div>
+        <div class="panel-bar"><div class="panel-bar-fill" id="bar-temp" style="width:50%"></div></div>
       </div>
-      <div class="panel">
-        <div class="p-label">◈ HUMIDITY</div>
-        <div><span class="p-value" id="v-hum">--</span><span class="p-unit">%RH</span></div>
-        <div class="progress-bg"><div class="progress-fill" id="b-hum" style="width: 0%"></div></div>
+      <div class="data-panel">
+        <div class="panel-label">■ 濕度 HUMID</div>
+        <div class="wx-icon">〜</div>
+        <div class="panel-value" id="val-humid">--</div>
+        <div class="panel-unit">% RH</div>
+        <div class="panel-bar"><div class="panel-bar-fill" id="bar-humid" style="width:0%"></div></div>
       </div>
-      <div class="panel" id="panel-aqi">
-        <div class="p-label">◈ AIR QUALITY</div>
-        <div><span class="p-value" id="v-aqi">--</span><span class="p-unit">AQI</span></div>
-        <div class="progress-bg"><div class="progress-fill" id="b-aqi" style="width: 0%"></div></div>
+      <div class="data-panel" id="panel-aqi">
+        <div class="panel-label">■ 空氣 AQI</div>
+        <div class="wx-icon">⊕</div>
+        <div class="panel-value" id="val-aqi">--</div>
+        <div class="panel-unit" id="aqi-label">PM2.5 載入中</div>
+        <div class="panel-bar"><div class="panel-bar-fill" id="bar-aqi" style="width:0%"></div></div>
       </div>
-      <div class="panel">
-        <div class="p-label">◈ WIND SPEED</div>
-        <div><span class="p-value" id="v-wind">--</span><span class="p-unit">km/h</span></div>
-        <div class="progress-bg"><div class="progress-fill" id="b-wind" style="width: 0%"></div></div>
+      <div class="data-panel">
+        <div class="panel-label">■ 風速 WIND</div>
+        <div class="wx-icon" id="wind-icon">↗</div>
+        <div class="panel-value" id="val-wind">--</div>
+        <div class="panel-unit"><span id="val-wdir">--</span> / <span id="val-desc">--</span></div>
+        <div class="panel-bar"><div class="panel-bar-fill" id="bar-wind" style="width:0%"></div></div>
       </div>
     </div>
   </div>
-
   <div id="status-bar">
-    <div class="status-box">
-      <div><span class="label-tag">LOG</span><span id="tts-msg">SYSTEM NOMINAL</span></div>
-      <div style="margin-top:5px;">
-        <button class="cmd-btn" onclick="toggleVoice()">VOICE_CMD</button>
-        <button class="cmd-btn" onclick="refreshData()">FORCE_SYNC</button>
+    <div class="status-block">
+      <div class="status-title">▶ TTS 報時</div>
+      <div id="tts-log" class="cursor">待機中</div>
+    </div>
+    <div class="status-block">
+      <div class="status-title">▶ 聲控</div>
+      <div id="voice-indicator"><div id="voice-dot"></div><span id="voice-status">STANDBY</span></div>
+      <button class="amb-btn" id="voice-btn" onclick="toggleVoice()" style="margin-top:3px;">啟動聆聽</button>
+    </div>
+    <div class="status-block">
+      <div class="status-title">▶ 環境音效</div>
+      <div id="ambient-controls">
+        <button class="amb-btn" id="btn-rain" onclick="toggleAmbient('rain')">雨聲</button>
+        <button class="amb-btn" id="btn-white" onclick="toggleAmbient('white')">白噪</button>
+        <button class="amb-btn" onclick="stopAmbient()">靜音</button>
       </div>
-    </div>
-    <div class="status-box">
-      <div class="label-tag">AMBIENT</div>
-      <button class="cmd-btn" id="btn-rain" onclick="toggleAmb('rain')">RAIN</button>
-      <button class="cmd-btn" id="btn-fire" onclick="toggleAmb('fire')">FIRE</button>
-    </div>
-    <div class="status-box">
-      <div class="label-tag">VOICE</div>
-      <span id="v-status">STANDBY</span>
     </div>
   </div>
 </div>
 
 <script>
-/** 核心配置 **/
-let config = { lat: 24.14, lon: 120.67, city: "TAICHUNG" }; // 預設台中
-let state = { start: Date.now(), weather: null, aqi: null, amb: {} };
-const ctx_audio = new (window.AudioContext || window.webkitAudioContext)();
-
-/** 二十四節氣計算 (精簡版) **/
-function getSolarTerm(d) {
-  const terms = ["小寒","大寒","立春","雨水","驚蟄","春分","清明","穀雨","立夏","小滿","芒種","夏至","小暑","大暑","立秋","處暑","白露","秋分","寒露","霜降","立冬","小雪","大雪","冬至"];
-  const diff = [0, 21208, 42467, 63836, 85337, 107014, 128867, 150921, 173149, 195551, 218072, 240693, 263343, 285989, 308563, 331033, 353350, 375494, 397447, 419210, 440795, 462224, 483532, 504758];
-  const base = new Date(1900,0,6,2,5).getTime();
-  let year = d.getFullYear(), count = (year-1900)*31556925974.7 + diff[d.getMonth()*2 + (d.getDate()>15?1:0)];
-  // 這裡僅作示意，實際計算需更精確，以下為簡化匹配
-  const month = d.getMonth(), day = d.getDate();
-  if(month === 3 && day === 4) return "清明";
-  if(month === 5 && day === 21) return "夏至";
-  if(month === 8 && day === 23) return "秋分";
-  if(month === 11 && day === 21) return "冬至";
-  return "";
-}
-
-/** 農曆 (由原代碼優化) **/
-function updateLunar() {
-    const now = new Date();
-    // 預留您的 getLunarDate 邏輯...
-    document.getElementById('term-val').textContent = getSolarTerm(now);
-}
-
-/** 背景 Matrix 效能優化版 **/
-const canvas = document.getElementById('bg-canvas');
-const c = canvas.getContext('2d');
-let drops = [];
-function initMatrix() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const cols = canvas.width / 20;
-    drops = Array(Math.floor(cols)).fill(1);
-}
-function drawMatrix() {
-    c.fillStyle = 'rgba(5, 15, 5, 0.05)';
-    c.fillRect(0, 0, canvas.width, canvas.height);
-    c.fillStyle = '#00ff41';
-    c.font = '15px monospace';
-    for(let i=0; i<drops.length; i++) {
-        const text = String.fromCharCode(0x30A0 + Math.random() * 96);
-        c.fillText(text, i*20, drops[i]*20);
-        if(drops[i]*20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
-        drops[i]++;
-    }
-    requestAnimationFrame(drawMatrix);
-}
-
-/** 數據獲取 **/
-async function fetchAll() {
-    try {
-        // 自動定位
-        navigator.geolocation.getCurrentPosition(p => {
-            config.lat = p.coords.latitude.toFixed(2);
-            config.lon = p.coords.longitude.toFixed(2);
-            document.getElementById('loc-val').textContent = `${config.lat}N ${config.lon}E`;
-        });
-
-        // 天氣
-        const resW = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${config.lat}&longitude=${config.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code`);
-        const dw = await resW.json();
-        const cur = dw.current;
-        
-        document.getElementById('v-temp').textContent = Math.round(cur.temperature_2m);
-        document.getElementById('b-temp').style.width = (cur.temperature_2m + 10) * 2 + '%';
-        document.getElementById('v-hum').textContent = cur.relative_humidity_2m;
-        document.getElementById('b-hum').style.width = cur.relative_humidity_2m + '%';
-        document.getElementById('v-wind').textContent = Math.round(cur.wind_speed_10m);
-        document.getElementById('b-wind').style.width = cur.wind_speed_10m * 2 + '%';
-
-        // 模擬 AQI (或接您原本的 API)
-        const aqi = 42; 
-        document.getElementById('v-aqi').textContent = aqi;
-        document.getElementById('b-aqi').style.width = (aqi/2) + '%';
-
-        updateTicker(`氣溫 ${cur.temperature_2m}°C / 濕度 ${cur.relative_humidity_2m}% / 系統運行穩定`);
-    } catch(e) { console.log("Fetch Error"); }
-}
-
-/** 電池與系統狀態 **/
-async function updateSys() {
-    if(navigator.getBattery) {
-        const b = await navigator.getBattery();
-        document.getElementById('pwr-val').textContent = Math.round(b.level * 100) + '%';
-    }
-    const up = Math.floor((Date.now() - state.start)/1000);
-    const h = Math.floor(up/3600).toString().padStart(2,'0');
-    const m = Math.floor((up%3600)/60).toString().padStart(2,'0');
-    const s = (up%60).toString().padStart(2,'0');
-    document.getElementById('uptime-val').textContent = `${h}:${m}:${s}`;
-}
-
-/** TTS 語音報時 **/
-function speak(msg) {
-    const u = new SpeechSynthesisUtterance(msg);
-    u.lang = 'zh-TW'; u.rate = 0.9;
-    document.getElementById('tts-msg').textContent = msg;
-    window.speechSynthesis.speak(u);
-}
-
-/** 環境音效：白噪音生成器 **/
-function toggleAmb(type) {
-    if(state.amb[type]) {
-        state.amb[type].stop();
-        delete state.amb[type];
-        document.getElementById('btn-'+type).classList.remove('active');
-        return;
-    }
-    const bufferSize = 2 * ctx_audio.sampleRate,
-    buffer = ctx_audio.createBuffer(1, bufferSize, ctx_audio.sampleRate),
-    output = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-
-    const whiteNoise = ctx_audio.createBufferSource();
-    whiteNoise.buffer = buffer; whiteNoise.loop = true;
-    const filter = ctx_audio.createBiquadFilter();
-    filter.type = type === 'rain' ? 'lowpass' : 'bandpass';
-    filter.frequency.value = type === 'rain' ? 800 : 400;
-    
-    whiteNoise.connect(filter); filter.connect(ctx_audio.destination);
-    whiteNoise.start();
-    state.amb[type] = whiteNoise;
-    document.getElementById('btn-'+type).classList.add('active');
-}
-
-function updateTicker(msg) {
-    document.getElementById('ticker').textContent = `// ${msg} // ${new Date().toLocaleTimeString()} //`;
-}
-
-/** 初始化 **/
-window.onload = () => {
-    initMatrix();
-    drawMatrix();
-    fetchAll();
-    updateLunar();
-    setInterval(updateSys, 1000);
-    setInterval(fetchAll, 300000);
-    
-    // 每小時報時
-    setInterval(() => {
-        const n = new Date();
-        if(n.getMinutes() === 0 && n.getSeconds() === 0) 
-            speak(`現在時間${n.getHours()}點整，環境感測器運作正常。`);
-    }, 1000);
-
-    // 時鐘更新
-    setInterval(() => {
-        const n = new Date();
-        document.getElementById('time-display').textContent = n.toTimeString().split(' ')[0];
-        document.getElementById('date-display').textContent = `${n.getFullYear()}-${(n.getMonth()+1).toString().padStart(2,'0')}-${n.getDate().toString().padStart(2,'0')} [${['SUN','MON','TUE','WED','THU','FRI','SAT'][n.getDay()]}]`;
-    }, 1000);
-};
-
-window.onresize = initMatrix;
-function refreshData() { speak("正在同步環境數據"); fetchAll(); }
-function toggleVoice() { document.getElementById('v-status').textContent = "LISTENING..."; /* 接入原語音辨識 */ }
-
-</script>
-</body>
-</html>
+// ── 農曆算法 (原汁原味保留) ──
+const TIAN_GAN=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
+const DI_ZHI=['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+const ZODIAC=['鼠','牛','虎','兔','龍','蛇','馬','羊','猴','雞','狗','豬'];
+const LUNAR_MONTHS=['正','二','三','四','五','六','七','八','九','十','冬','臘'];
+const LUNAR_DAYS=['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+const LUNAR_DATA=[
+  [2000,205,0b1010010101010,8],[2001,124,0b0100101010110,5],[2002,212,0b1010010101010,4],
+  [2003,201,0b0101001010101,2],[2004,122,0b1001010010101,2],[2005,209,0b0101101001010,3],
+  [2006,129,0b0101010101010,7],[2007,218,0b1010010101010,7],[2008,207,0b1010010101001,5],
+  [2009,126,0b0101001001010,5],[2010,214,0b0101010010101,8],[2011,203,0b0101010101010,6],
+  [2012,123,0b1001010101010,4],[2013,210,0b1010010010101,9],[2014,131,0b0101010010101,9],
+  [2015,219,0b0101010101010,6],[2016,208,0b1010100101010,6],[2017,128,0b0101010010101,6],
+  [2018,216,0b0100101001010,0],[2019,205,0b1010010010101,0],[2020,125,0b0101001010100,4],
+  [2021,212,0b1001010101010,0],[2022,201,0b1010010101010,3],[2023,122,0b0101010010101,2],
+  [2024,210,0b1010010101010,6],[2025,129,0b0101001010101,6],[2026,217,0b0010101001010,0],
+  [2027,206,0b1001010010101,0],[2028,126,0b0101010010101,5],[2029,213,0b0100101010010,0],
+  [2030,203,0b1010010101010,0],
+];
+function getLunarDate(date) {
+  try {
+    const y=date.getFullYear(),m=date.getMonth()+1,d=date.getDate();
+    let row=LUNAR_DATA.find(r=>r[0]===y);
+    if(!row) return "資料超出範圍";
+    const sfMM=Math.floor
